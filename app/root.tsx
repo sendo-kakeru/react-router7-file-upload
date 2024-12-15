@@ -1,14 +1,22 @@
 import {
+  Form,
   isRouteErrorResponse,
+  Link,
   Links,
   Meta,
   Outlet,
   Scripts,
   ScrollRestoration,
+  useHref,
+  useNavigate,
+  type LoaderFunctionArgs,
 } from "react-router";
-
+import { Button, Card, CardBody, NextUIProvider } from "@nextui-org/react";
 import type { Route } from "./+types/root";
-import stylesheet from "./app.css?url";
+import stylesheet from "./styles/app.css?url";
+import type React from "react";
+import { sessionStorage } from "./features/auth/session-storage.server";
+import type { User } from "@prisma/client";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -24,7 +32,14 @@ export const links: Route.LinksFunction = () => [
   { rel: "stylesheet", href: stylesheet },
 ];
 
+export async function loader({ request }: LoaderFunctionArgs) {
+  const session = await sessionStorage.getSession(request.headers.get("cookie"));
+  const me: User = session.get("me");
+  return { me };
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate();
   return (
     <html lang="en">
       <head>
@@ -34,7 +49,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        {children}
+        <NextUIProvider navigate={navigate} useHref={useHref}>
+          {children}
+        </NextUIProvider>
         <ScrollRestoration />
         <Scripts />
       </body>
@@ -42,8 +59,32 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function App() {
-  return <Outlet />;
+export default function App({ loaderData }: { loaderData: Awaited<ReturnType<typeof loader>> }) {
+  return (
+    <div className="flex flex-col gap-4 items-center mx-auto w-full max-w-[800px] py-10 px-4 h-svh">
+      <Card className="w-full">
+        <CardBody className="items-center">
+          {loaderData.me ? (
+            <div className="flex items-center gap-8">
+              <p>
+                ようこそ <b className="text-xl">{loaderData.me.name}</b> さん
+              </p>
+              <Form action="/api/auth/logout" method="POST">
+                <Button type="submit" color="primary" radius="full" className="w-fit">
+                  ログアウト
+                </Button>
+              </Form>
+            </div>
+          ) : (
+            <Button color="primary" radius="full" to="/login" as={Link} className="w-fit">
+              ログイン
+            </Button>
+          )}
+        </CardBody>
+      </Card>
+      <Outlet />
+    </div>
+  );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
@@ -54,9 +95,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   if (isRouteErrorResponse(error)) {
     message = error.status === 404 ? "404" : "Error";
     details =
-      error.status === 404
-        ? "The requested page could not be found."
-        : error.statusText || details;
+      error.status === 404 ? "The requested page could not be found." : error.statusText || details;
   } else if (import.meta.env.DEV && error && error instanceof Error) {
     details = error.message;
     stack = error.stack;

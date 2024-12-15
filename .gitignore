@@ -1,6 +1,9 @@
 .DS_Store
 /node_modules/
-
+.env
+/.pnpm-store
+/.cache
 # React Router
 /.react-router/
 /build/
+/sessions
